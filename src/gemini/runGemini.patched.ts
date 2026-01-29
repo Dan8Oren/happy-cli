@@ -83,7 +83,7 @@ export async function runGemini(opts: {
   const machineId = settings?.machineId;
   if (!machineId) {
     console.error(`[START] No machine ID found in settings, which is unexpected since authAndSetupMachineIfNeeded should have created it. Please report this issue on https://github.com/slopus/happy-cli/issues`);
-    process.exit(1);
+    throw new Error("Process exited with status 1") /* throw new Error("Process exited with status " + 1) patched */;
   }
   logger.debug(`Using machineId: ${machineId}`);
   await api.getOrCreateMachine({
@@ -394,10 +394,10 @@ export async function runGemini(opts: {
       }
 
       logger.debug('[Gemini] Session termination complete, exiting');
-      process.exit(0);
+      return /* throw new Error("Process exited with status " + 0) patched */;
     } catch (error) {
       logger.debug('[Gemini] Error during session termination:', error);
-      process.exit(1);
+      throw new Error("Process exited with status 1") /* throw new Error("Process exited with status " + 1) patched */;
     }
   };
 

@@ -40,6 +40,7 @@ interface LoopOptions {
     hookSettingsPath: string
     /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
     jsRuntime?: JsRuntime
+    onStreamDelta?: (text: string, isThinking?: boolean) => void;
 }
 
 export async function loop(opts: LoopOptions) {
@@ -59,7 +60,8 @@ export async function loop(opts: LoopOptions) {
         allowedTools: opts.allowedTools,
         onModeChange: opts.onModeChange,
         hookSettingsPath: opts.hookSettingsPath,
-        jsRuntime: opts.jsRuntime
+        jsRuntime: opts.jsRuntime,
+        onStreamDelta: opts.onStreamDelta
     });
 
     // Notify that session is ready

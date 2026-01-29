@@ -31,7 +31,7 @@ import { Session } from './session';
 /** JavaScript runtime to use for spawning Claude Code */
 export type JsRuntime = 'node' | 'bun'
 
-export interface StartOptions {
+export interface StartOptions { onReady?: (session: any) => void;
     model?: string
     permissionMode?: PermissionMode
     startingMode?: 'local' | 'remote'
@@ -74,7 +74,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     let machineId = settings?.machineId
     if (!machineId) {
         console.error(`[START] No machine ID found in settings, which is unexpected since authAndSetupMachineIfNeeded should have created it. Please report this issue on https://github.com/slopus/happy-cli/issues`);
-        process.exit(1);
+        throw new Error("Process exited with status 1") /* throw new Error("Process exited with status " + 1) patched */;
     }
     logger.debug(`Using machineId: ${machineId}`);
 
@@ -145,7 +145,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             reconnection.cancel();
             stopCaffeinate();
         }
-        process.exit(0);
+        return /* throw new Error("Process exited with status " + 0) patched */;
     }
 
     logger.debug(`Session created: ${response.id}`);
@@ -404,10 +404,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             cleanupHookSettingsFile(hookSettingsPath);
 
             logger.debug('[START] Cleanup complete, exiting');
-            process.exit(0);
+            return /* throw new Error("Process exited with status " + 0) patched */;
         } catch (error) {
             logger.debug('[START] Error during cleanup:', error);
-            process.exit(1);
+            throw new Error("Process exited with status 1") /* throw new Error("Process exited with status " + 1) patched */;
         }
     };
 
@@ -444,7 +444,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
                 controlledByUser: newMode === 'local'
             }));
         },
-        onSessionReady: (sessionInstance) => {
+        onSessionReady: (sessionInstance) => { options.onReady?.(sessionInstance);
             // Store reference for hook server callback
             currentSession = sessionInstance;
         },
@@ -491,5 +491,5 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     logger.debug('Stopped Hook server and cleaned up settings file');
 
     // Exit
-    process.exit(0);
+    return /* throw new Error("Process exited with status " + 0) patched */;
 }

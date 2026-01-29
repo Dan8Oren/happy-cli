@@ -134,6 +134,14 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
             let umessage = message as SDKAssistantMessage;
             if (umessage.message.content && Array.isArray(umessage.message.content)) {
                 for (let c of umessage.message.content) {
+                    // Stream deltas
+                    if (c.type === 'text' && c.text) {
+                        session.onStreamDelta?.(c.text, false);
+                    }
+                    if (c.type === 'thinking' && c.thinking) {
+                        session.onStreamDelta?.(c.thinking, true);
+                    }
+
                     if (c.type === 'tool_use' && (c.name === 'exit_plan_mode' || c.name === 'ExitPlanMode')) {
                         logger.debug('[remote]: detected plan mode tool call ' + c.id!);
                         planModeToolCalls.add(c.id! as string);
@@ -393,10 +401,10 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     },
                     signal: abortController.signal,
                 });
-                
+
                 // Consume one-time Claude flags after spawn
                 session.consumeOneTimeFlags();
-                
+
                 if (!exitReason && abortController.signal.aborted) {
                     session.client.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
                 }

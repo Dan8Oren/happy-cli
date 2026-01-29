@@ -18,15 +18,17 @@ export class Session {
     /** Path to temporary settings file with SessionStart hook (required for session tracking) */
     readonly hookSettingsPath: string;
     /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
+    /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
     readonly jsRuntime: JsRuntime;
+    readonly onStreamDelta?: (text: string, isThinking?: boolean) => void;
 
     sessionId: string | null;
     mode: 'local' | 'remote' = 'local';
     thinking: boolean = false;
-    
+
     /** Callbacks to be notified when session ID is found/changed */
     private sessionFoundCallbacks: ((sessionId: string) => void)[] = [];
-    
+
     /** Keep alive interval reference for cleanup */
     private keepAliveInterval: NodeJS.Timeout;
 
@@ -46,6 +48,7 @@ export class Session {
         hookSettingsPath: string,
         /** JavaScript runtime to use for spawning Claude Code (default: 'node') */
         jsRuntime?: JsRuntime,
+        onStreamDelta?: (text: string, isThinking?: boolean) => void,
     }) {
         this.path = opts.path;
         this.api = opts.api;
@@ -60,6 +63,7 @@ export class Session {
         this._onModeChange = opts.onModeChange;
         this.hookSettingsPath = opts.hookSettingsPath;
         this.jsRuntime = opts.jsRuntime ?? 'node';
+        this.onStreamDelta = opts.onStreamDelta;
 
         // Start keep alive
         this.client.keepAlive(this.thinking, this.mode);
@@ -67,7 +71,7 @@ export class Session {
             this.client.keepAlive(this.thinking, this.mode);
         }, 2000);
     }
-    
+
     /**
      * Cleanup resources (call when session is no longer needed)
      */
@@ -101,27 +105,27 @@ export class Session {
      */
     onSessionFound = (sessionId: string) => {
         this.sessionId = sessionId;
-        
+
         // Update metadata with Claude Code session ID
         this.client.updateMetadata((metadata) => ({
             ...metadata,
             claudeSessionId: sessionId
         }));
         logger.debug(`[Session] Claude Code session ID ${sessionId} added to metadata`);
-        
+
         // Notify all registered callbacks
         for (const callback of this.sessionFoundCallbacks) {
             callback(sessionId);
         }
     }
-    
+
     /**
      * Register a callback to be notified when session ID is found/changed
      */
     addSessionFoundCallback = (callback: (sessionId: string) => void): void => {
         this.sessionFoundCallbacks.push(callback);
     }
-    
+
     /**
      * Remove a session found callback
      */
@@ -146,16 +150,16 @@ export class Session {
      */
     consumeOneTimeFlags = (): void => {
         if (!this.claudeArgs) return;
-        
+
         const filteredArgs: string[] = [];
         for (let i = 0; i < this.claudeArgs.length; i++) {
             const arg = this.claudeArgs[i];
-            
+
             if (arg === '--continue') {
                 logger.debug('[Session] Consumed --continue flag');
                 continue;
             }
-            
+
             if (arg === '--resume') {
                 // Check if next arg looks like a UUID (contains dashes and alphanumeric)
                 if (i + 1 < this.claudeArgs.length) {
@@ -175,11 +179,26 @@ export class Session {
                 }
                 continue;
             }
-            
+
             filteredArgs.push(arg);
         }
-        
+
         this.claudeArgs = filteredArgs.length > 0 ? filteredArgs : undefined;
         logger.debug(`[Session] Consumed one-time flags, remaining args:`, this.claudeArgs);
+    }
+
+    /**
+     * Respond to a permission request manually (e.g. from agent-manager via IPC/STDIN)
+     */
+    respondToPermission = async (requestId: string, approved: boolean) => {
+        logger.debug(`[Session] Manually responding to permission request ${requestId}: ${approved}`);
+        const response = {
+            id: requestId,
+            approved: approved,
+            receivedAt: Date.now()
+        };
+        // Manually trigger the handler that PermissionHandler registered
+        // This bridges the gap between agent-manager (outside) and PermissionHandler (inside)
+        await this.client.rpcHandlerManager.invokeHandler('permission', response);
     }
 }

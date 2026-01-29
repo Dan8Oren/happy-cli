@@ -86,6 +86,29 @@ export class RpcHandlerManager {
         }
     }
 
+    /**
+     * ID: invokeHandler
+     * Manually invoke a registered handler for a specific method.
+     * Useful for injecting messages from sidecar channels directly into the RPC bus.
+     */
+    async invokeHandler(method: string, params: any): Promise<any> {
+        const prefixedMethod = this.getPrefixedMethod(method);
+        const handler = this.handlers.get(prefixedMethod);
+
+        if (!handler) {
+            this.logger('[RPC] [invokeHandler] Method not found', { method: prefixedMethod });
+            return;
+        }
+
+        this.logger('[RPC] [invokeHandler] Manually invoking handler', { method: prefixedMethod });
+        try {
+            await handler(params);
+        } catch (error) {
+            this.logger('[RPC] [invokeHandler] Error invoking handler', { error });
+            throw error;
+        }
+    }
+
     onSocketConnect(socket: Socket): void {
         this.socket = socket;
         for (const [prefixedMethod] of this.handlers) {

@@ -36,6 +36,7 @@ export interface SDKAssistantMessage extends SDKMessage {
         content: Array<{
             type: string
             text?: string
+            thinking?: string
             id?: string
             name?: string
             input?: unknown
