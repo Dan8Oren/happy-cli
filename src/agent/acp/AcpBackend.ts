@@ -17,6 +17,8 @@ import {
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type InitializeRequest,
+  type InitializeResponse,
+  type AuthenticateRequest,
   type NewSessionRequest,
   type PromptRequest,
   type ContentBlock,
@@ -680,7 +682,7 @@ export class AcpBackend implements AgentBackend {
       const initTimeout = this.transport.getInitTimeout();
       logger.debug(`[AcpBackend] Initializing connection (timeout: ${initTimeout}ms)...`);
 
-      await withRetry(
+      const initResponse: InitializeResponse = await withRetry(
         async () => {
           let timeoutHandle: NodeJS.Timeout | null = null;
           try {
@@ -712,7 +714,52 @@ export class AcpBackend implements AgentBackend {
           maxDelayMs: RETRY_CONFIG.maxDelayMs,
         }
       );
-      logger.debug(`[AcpBackend] Initialize completed`);
+      logger.debug(`[AcpBackend] Initialize completed. authMethods: ${JSON.stringify(initResponse.authMethods)}`);
+
+      // If the agent advertises auth methods, authenticate before creating a session.
+      // This is required by agents like Gemini CLI that use ACP-level authentication.
+      if (initResponse.authMethods && initResponse.authMethods.length > 0) {
+        const authMethod = initResponse.authMethods[0];
+        logger.debug(`[AcpBackend] Agent requires authentication. Using method: ${authMethod.id} (${authMethod.description || 'no description'})`);
+
+        const authRequest: AuthenticateRequest = {
+          methodId: authMethod.id,
+        };
+
+        await withRetry(
+          async () => {
+            let timeoutHandle: NodeJS.Timeout | null = null;
+            try {
+              const result = await Promise.race([
+                this.connection!.authenticate(authRequest).then((res) => {
+                  if (timeoutHandle) {
+                    clearTimeout(timeoutHandle);
+                    timeoutHandle = null;
+                  }
+                  return res;
+                }),
+                new Promise<never>((_, reject) => {
+                  timeoutHandle = setTimeout(() => {
+                    reject(new Error(`Authenticate timeout after ${initTimeout}ms - ${this.transport.agentName} did not respond`));
+                  }, initTimeout);
+                }),
+              ]);
+              return result;
+            } finally {
+              if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+              }
+            }
+          },
+          {
+            operationName: 'Authenticate',
+            maxAttempts: RETRY_CONFIG.maxAttempts,
+            baseDelayMs: RETRY_CONFIG.baseDelayMs,
+            maxDelayMs: RETRY_CONFIG.maxDelayMs,
+          }
+        );
+        logger.debug(`[AcpBackend] Authentication completed`);
+      }
 
       // Create a new session with retry
       const mcpServers = this.options.mcpServers

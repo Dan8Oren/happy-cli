@@ -13,14 +13,14 @@ import type { AgentBackend, McpServerConfig, AgentFactoryOptions } from '../core
 import { agentRegistry } from '../core';
 import { geminiTransport } from '../transport';
 import { logger } from '@/ui/logger';
-import { 
-  GEMINI_API_KEY_ENV, 
-  GOOGLE_API_KEY_ENV, 
-  GEMINI_MODEL_ENV, 
-  DEFAULT_GEMINI_MODEL 
+import {
+  GEMINI_API_KEY_ENV,
+  GOOGLE_API_KEY_ENV,
+  GEMINI_MODEL_ENV,
+  DEFAULT_GEMINI_MODEL
 } from '@/gemini/constants';
-import { 
-  readGeminiLocalConfig, 
+import {
+  readGeminiLocalConfig,
   determineGeminiModel,
   getGeminiModelSource
 } from '@/gemini/utils/config';
@@ -31,21 +31,21 @@ import {
 export interface GeminiBackendOptions extends AgentFactoryOptions {
   /** API key for Gemini (defaults to GEMINI_API_KEY or GOOGLE_API_KEY env var) */
   apiKey?: string;
-  
+
   /** OAuth token from Happy cloud (via 'happy connect gemini') - highest priority */
   cloudToken?: string;
-  
+
   /** Current user email (from OAuth id_token) - used to match per-account project ID */
   currentUserEmail?: string;
-  
+
   /** Model to use. If undefined, will use local config, env var, or default.
    *  If explicitly set to null, will use default (skip local config).
    *  (defaults to GEMINI_MODEL env var or 'gemini-2.5-pro') */
   model?: string | null;
-  
+
   /** MCP servers to make available to the agent */
   mcpServers?: Record<string, McpServerConfig>;
-  
+
   /** Optional permission handler for tool approval */
   permissionHandler?: AcpPermissionHandler;
 }
@@ -78,10 +78,10 @@ export function createGeminiBackend(options: GeminiBackendOptions): GeminiBacken
   // 2. Local Gemini CLI config files (~/.gemini/)
   // 3. GEMINI_API_KEY environment variable
   // 4. GOOGLE_API_KEY environment variable - lowest priority
-  
+
   // Try reading from local Gemini CLI config (token and model)
   const localConfig = readGeminiLocalConfig();
-  
+
   let apiKey = options.cloudToken       // 1. Happy cloud token (passed from runGemini)
     || localConfig.token                // 2. Local config (~/.gemini/)
     || process.env[GEMINI_API_KEY_ENV]  // 3. GEMINI_API_KEY env var
@@ -94,7 +94,7 @@ export function createGeminiBackend(options: GeminiBackendOptions): GeminiBacken
 
   // Command to run gemini
   const geminiCommand = 'gemini';
-  
+
   // Get model from options, local config, system environment, or use default
   // Priority: options.model (if provided) > local config > env var > default
   // If options.model is undefined, check local config, then env, then use default
@@ -112,7 +112,7 @@ export function createGeminiBackend(options: GeminiBackendOptions): GeminiBacken
   if (localConfig.googleCloudProject) {
     const storedEmail = localConfig.googleCloudProjectEmail;
     const currentEmail = options.currentUserEmail;
-    
+
     // Use project if: no email stored (applies to all), or emails match
     if (!storedEmail || storedEmail === currentEmail) {
       googleCloudProject = localConfig.googleCloudProject;
@@ -129,11 +129,14 @@ export function createGeminiBackend(options: GeminiBackendOptions): GeminiBacken
     args: geminiArgs,
     env: {
       ...options.env,
-      ...(apiKey ? { [GEMINI_API_KEY_ENV]: apiKey, [GOOGLE_API_KEY_ENV]: apiKey } : {}),
+      // Only set env vars if it looks like an API key (starts with AIza).
+      // If it's an OAuth token, we rely on the file-based credential storage (oauth_creds.json)
+      // which the CLI autodetects or we configured explicitly.
+      ...(apiKey && apiKey.startsWith('AIza') ? { [GEMINI_API_KEY_ENV]: apiKey, [GOOGLE_API_KEY_ENV]: apiKey } : {}),
       // Pass model via env var - gemini CLI reads GEMINI_MODEL automatically
       [GEMINI_MODEL_ENV]: model,
       // Pass Google Cloud Project for Workspace accounts
-      ...(googleCloudProject ? { 
+      ...(googleCloudProject ? {
         GOOGLE_CLOUD_PROJECT: googleCloudProject,
         GOOGLE_CLOUD_PROJECT_ID: googleCloudProject,
       } : {}),
@@ -148,9 +151,9 @@ export function createGeminiBackend(options: GeminiBackendOptions): GeminiBacken
     hasChangeTitleInstruction: (prompt: string) => {
       const lower = prompt.toLowerCase();
       return lower.includes('change_title') ||
-             lower.includes('change title') ||
-             lower.includes('set title') ||
-             lower.includes('mcp__happy__change_title');
+        lower.includes('change title') ||
+        lower.includes('set title') ||
+        lower.includes('mcp__happy__change_title');
     },
   };
 

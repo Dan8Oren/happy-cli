@@ -182,6 +182,7 @@ export async function runGemini(opts: {
   });
   session = initialSession;
 
+
   // Report to daemon (only if we have a real session)
   if (response) {
     try {
@@ -201,6 +202,10 @@ export async function runGemini(opts: {
     permissionMode: mode.permissionMode,
     model: mode.model,
   }));
+
+  // Create queue property on session for agent-manager
+  (session as any).queue = messageQueue;
+  opts.onReady?.(session);
 
   // Conversation history for context preservation across model changes
   const conversationHistory = new ConversationHistory({ maxMessages: 20, maxCharacters: 50000 });
@@ -1205,7 +1210,7 @@ export async function runGemini(opts: {
                 `Guide: https://goo.gle/gemini-cli-auth-docs#workspace-gca`;
             }
             // Check for empty error (command not found)
-            else if (Object.keys(error).length === 0) {
+            else if (Object.keys(error).length === 0 && !(error instanceof Error)) {
               errorMsg = 'Failed to start Gemini. Is "gemini" CLI installed? Run: npm install -g @google/gemini-cli';
             }
             // Use message from error object
