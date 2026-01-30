@@ -223,6 +223,28 @@ function nodeToWebStreams(
 }
 
 /**
+ * Convert an unknown error (which may be a JSON-RPC error object from the ACP SDK)
+ * into a proper Error instance, preserving code/data/message from plain objects.
+ */
+function toError(error: unknown): Error & { code?: number; data?: unknown } {
+  if (error instanceof Error) {
+    return error;
+  }
+  // ACP SDK rejects with plain JSON-RPC error objects: { code, message, data }
+  if (typeof error === 'object' && error !== null) {
+    const errObj = error as Record<string, unknown>;
+    const message = typeof errObj.message === 'string'
+      ? errObj.message
+      : JSON.stringify(error);
+    const wrapped = new Error(message) as Error & { code?: number; data?: unknown };
+    if (typeof errObj.code === 'number') wrapped.code = errObj.code;
+    if (errObj.data !== undefined) wrapped.data = errObj.data;
+    return wrapped;
+  }
+  return new Error(String(error));
+}
+
+/**
  * Helper to run an async operation with retry logic
  */
 async function withRetry<T>(
@@ -241,7 +263,7 @@ async function withRetry<T>(
     try {
       return await operation();
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError = toError(error);
 
       if (attempt < options.maxAttempts) {
         // Calculate delay with exponential backoff
@@ -762,10 +784,13 @@ export class AcpBackend implements AgentBackend {
     } catch (error) {
       // Log to file only, not console
       logger.debug('[AcpBackend] Error starting session:', error);
-      this.emit({ 
-        type: 'status', 
-        status: 'error', 
-        detail: error instanceof Error ? error.message : String(error) 
+      const errAny = error as any;
+      this.emit({
+        type: 'status',
+        status: 'error',
+        detail: error instanceof Error ? error.message : String(error),
+        ...(errAny?.code !== undefined && { code: errAny.code }),
+        ...(errAny?.data !== undefined && { data: errAny.data }),
       });
       throw error;
     }
