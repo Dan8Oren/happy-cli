@@ -110,6 +110,9 @@ export class GeminiTransport implements TransportHandler {
   filterStdoutLine(line: string): string | null {
     const trimmed = line.trim();
 
+    // Log raw lines for debugging streaming issues
+    // logger.debug(`[GeminiTransport] Raw stdout line: ${line.substring(0, 100)}...`);
+
     // Empty lines - skip
     if (!trimmed) {
       return null;

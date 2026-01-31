@@ -71,6 +71,10 @@ export interface HandlerContext {
   clearIdleTimeout: () => void;
   /** Set idle timeout helper */
   setIdleTimeout: (callback: () => void, ms: number) => void;
+  /** Current thinking state */
+  isThinking: boolean;
+  /** Setter for thinking state */
+  setIsThinking: (thinking: boolean) => void;
 }
 
 /**
@@ -165,10 +169,33 @@ export function handleAgentMessageChunk(
     return { handled: false };
   }
 
-  // Filter out "thinking" messages (start with **...**)
-  const isThinking = /^\*\*[^*]+\*\*\n/.test(text);
+  // Check for start of thinking block (stateful or stateless)
+  // We check for:
+  // 1. Existing thinking state (ctx.isThinking)
+  // 2. Start of a thinking block (e.g. "**Thinking**")
+  // 3. Regex match for full block (legacy/stateless)
+  let isThinkingChunk = ctx.isThinking;
 
-  if (isThinking) {
+  if (!isThinkingChunk) {
+    // Check for thinking block start
+    const trimmed = text.trimStart();
+    if (trimmed.startsWith('**Thinking**') || trimmed.startsWith('**Thought**')) {
+      isThinkingChunk = true;
+      ctx.setIsThinking(true);
+    }
+    // Fallback to legacy regex for robust detections of single-chunk thinking blocks
+    else if (/^\*\*[^*]+\*\*\n/.test(text)) {
+      // Note: We don't necessarily set global thinking state here as this might be a complete block
+      // But if it looks like a header (short, no double newline), we might want to enter thinking state
+      // For now, treat as thinking chunk but don't force state unless it's clearly just a header
+      if (text.length < 50 && !text.includes('\n\n')) {
+        ctx.setIsThinking(true);
+      }
+      isThinkingChunk = true;
+    }
+  }
+
+  if (isThinkingChunk) {
     ctx.emit({
       type: 'event',
       name: 'thinking',
