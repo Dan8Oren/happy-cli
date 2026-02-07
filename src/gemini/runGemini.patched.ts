@@ -205,6 +205,17 @@ export async function runGemini(opts: {
 
   // Create queue property on session for agent-manager
   (session as any).queue = messageQueue;
+  // Add respondToPermission for agent-manager IPC bridge
+  (session as any).respondToPermission = async (requestId: string, approved: boolean) => {
+    logger.debug(`[gemini] Responding to permission: ${requestId} = ${approved}`);
+    const response = {
+      id: requestId,
+      approved,
+      receivedAt: Date.now()
+    };
+    await session.rpcHandlerManager.invokeHandler('permission', response);
+  };
+
   opts.onReady?.(session);
 
   // Conversation history for context preservation across model changes
